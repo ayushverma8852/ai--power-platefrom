@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search,
@@ -10,23 +10,47 @@ import {
   RotateCcw,
   Sparkles,
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import { mockHistory } from '../../data/mockHistory';
+import { api } from '../../services/api';
 
 export default function History() {
   const [searchTerm, setSearchTerm] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
+  const [historyRecords, setHistoryRecords] = useState(mockHistory);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const filteredHistory = mockHistory.filter((item) => {
+  // Fetch live interview history from Spring Boot backend
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+    api.getHistory(searchTerm, difficultyFilter)
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setHistoryRecords(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('[History] Could not fetch live history, displaying fallback mock history:', err.message);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [searchTerm, difficultyFilter]);
+
+  const filteredHistory = historyRecords.filter((item) => {
     const matchesSearch =
       item.roleTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.topicsCovered.some((t) =>
+      (item.topicsCovered && item.topicsCovered.some((t) =>
         t.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      ));
     const matchesDifficulty =
       difficultyFilter === 'all' ||
       item.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
@@ -201,7 +225,7 @@ export default function History() {
                     </td>
 
                     <td className="py-4 px-6 text-right">
-                      <Link to="/evaluation">
+                      <Link to={item.id ? `/evaluation?id=${item.id}` : '/evaluation'}>
                         <Button
                           variant="ghost"
                           size="sm"

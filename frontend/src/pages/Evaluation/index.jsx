@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Award,
   CheckCircle2,
@@ -16,17 +16,47 @@ import {
   BarChart2,
   TrendingUp,
   Check,
-  Brain
+  Brain,
+  Loader2
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import ProgressBar from '../../components/common/ProgressBar';
 import { useInterview } from '../../context/InterviewContext';
+import { api } from '../../services/api';
 
 export default function Evaluation() {
-  const { latestEvaluation } = useInterview();
-  const evaluation = latestEvaluation;
+  const [searchParams] = useSearchParams();
+  const idParam = searchParams.get('id');
+  const { latestEvaluation, setLatestEvaluation } = useInterview();
+
+  const [loading, setLoading] = useState(false);
+  const [evaluation, setEvaluation] = useState(latestEvaluation);
+
+  // If a specific interview id was requested via query param (e.g. from history), load it from backend
+  useEffect(() => {
+    if (idParam && idParam !== latestEvaluation?.id && idParam !== latestEvaluation?.interviewId) {
+      let isMounted = true;
+      setLoading(true);
+      api.getResults(idParam)
+        .then((report) => {
+          if (isMounted && report) {
+            setEvaluation(report);
+            setLatestEvaluation(report);
+          }
+        })
+        .catch((err) => {
+          console.warn('[Evaluation] Could not fetch evaluation report for id:', idParam, err.message);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+      return () => { isMounted = false; };
+    } else {
+      setEvaluation(latestEvaluation);
+    }
+  }, [idParam, latestEvaluation]);
 
   // Manage accordion open state per question review
   const [expandedQuestions, setExpandedQuestions] = useState({ 0: true });
@@ -43,6 +73,16 @@ export default function Evaluation() {
     if (score >= 75) return 'brand';
     return 'amber';
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <h3 className="text-base font-bold text-slate-800">Retrieving AI Evaluation Report...</h3>
+        <p className="text-xs text-slate-500">Contacting backend database and fetching score breakdown</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">

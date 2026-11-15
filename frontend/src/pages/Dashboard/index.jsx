@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Play,
@@ -17,9 +17,11 @@ import {
   Clock,
   CheckCircle2,
   ChevronDown,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { useInterview } from '../../context/InterviewContext';
+import { api } from '../../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -30,17 +32,83 @@ export default function Dashboard() {
   const [skillsFocus, setSkillsFocus] = useState('Java, DSA, Spring Boot');
   const [experienceLevel, setExperienceLevel] = useState('Fresher');
   const [difficultyLevel, setDifficultyLevel] = useState('Medium');
+  const [isStarting, setIsStarting] = useState(false);
 
-  const handleStartInterview = (e) => {
+  // Live dashboard metrics with resilient defaults
+  const [dashboardData, setDashboardData] = useState({
+    totalInterviews: 5,
+    averageScore: 78,
+    strongestSkill: 'Java',
+    currentStreak: '3 Days',
+    weeklyPerformance: [
+      { day: 'Mon', score: 60 },
+      { day: 'Tue', score: 70 },
+      { day: 'Wed', score: 85 },
+      { day: 'Thu', score: 75 },
+      { day: 'Fri', score: 88 }
+    ],
+    recentActivities: [
+      {
+        id: 'act-1',
+        type: 'INTERVIEW',
+        title: 'Interview Completed – Java Developer',
+        subtitle: 'Score: 80%',
+        timeAgo: '2 hours ago',
+        score: 80
+      },
+      {
+        id: 'act-2',
+        type: 'STUDY',
+        title: 'New Study Material Added',
+        subtitle: 'Data Structures',
+        timeAgo: '1 day ago',
+        score: null
+      }
+    ]
+  });
+
+  // Fetch live statistics from Spring Boot Backend
+  useEffect(() => {
+    let isMounted = true;
+    api.getDashboard()
+      .then((data) => {
+        if (isMounted && data) {
+          setDashboardData((prev) => ({
+            ...prev,
+            ...data,
+            weeklyPerformance: data.weeklyPerformance && data.weeklyPerformance.length > 0
+              ? data.weeklyPerformance
+              : prev.weeklyPerformance,
+            recentActivities: data.recentActivities && data.recentActivities.length > 0
+              ? data.recentActivities
+              : prev.recentActivities
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('[Dashboard] Could not fetch live dashboard metrics, using defaults:', err.message);
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleStartInterview = async (e) => {
     e.preventDefault();
-    startInterview({
-      roleTitle: targetRole,
-      skills: skillsFocus.split(',').map(s => s.trim()),
-      experienceLevel: experienceLevel,
-      difficulty: difficultyLevel.toLowerCase(),
-      questionCount: 5
-    });
-    navigate('/interview-session');
+    setIsStarting(true);
+    try {
+      await startInterview({
+        roleTitle: targetRole,
+        skills: skillsFocus.split(',').map((s) => s.trim()),
+        experienceLevel: experienceLevel,
+        difficulty: difficultyLevel.toLowerCase(),
+        questionCount: 5
+      });
+      navigate('/interview-session');
+    } catch (err) {
+      console.error('Failed to start interview:', err);
+      navigate('/interview-session');
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   return (
@@ -137,7 +205,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Total Interviews</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">5</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">{dashboardData.totalInterviews}</div>
           </div>
         </div>
 
@@ -148,7 +216,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Average Score</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">78%</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">{dashboardData.averageScore}%</div>
           </div>
         </div>
 
@@ -159,7 +227,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Strongest Skill</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">Java</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">{dashboardData.strongestSkill}</div>
           </div>
         </div>
 
@@ -170,7 +238,7 @@ export default function Dashboard() {
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Current Streak</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">3 Days</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">{dashboardData.currentStreak}</div>
           </div>
         </div>
       </div>
@@ -299,10 +367,20 @@ export default function Dashboard() {
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-[#1d68f2] hover:bg-[#1a5cd6] active:bg-[#1650bd] text-white font-semibold text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  disabled={isStarting}
+                  className="w-full py-3 px-4 rounded-xl bg-[#1d68f2] hover:bg-[#1a5cd6] active:bg-[#1650bd] disabled:opacity-75 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>Start Interview</span>
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Generating Questions with AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Start Interview</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -329,59 +407,73 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            {/* Line Chart rendered via SVG matching reference screenshot */}
-            <div className="mt-4 relative h-48 w-full flex items-center justify-center">
-              <svg className="w-full h-full overflow-visible" viewBox="0 0 320 160">
-                {/* Horizontal Guide Lines */}
-                <line x1="40" y1="20" x2="310" y2="20" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                <line x1="40" y1="50" x2="310" y2="50" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                <line x1="40" y1="80" x2="310" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                <line x1="40" y1="110" x2="310" y2="110" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                <line x1="40" y1="140" x2="310" y2="140" stroke="#e2e8f0" strokeWidth="1" />
+            {/* Line Chart rendered via SVG with dynamic data */}
+            {(() => {
+              const xCoords = [60, 120, 180, 240, 295];
+              const weekData = dashboardData.weeklyPerformance || [];
+              const defaultDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+              const pts = xCoords.map((x, i) => {
+                const s = weekData[i] ? weekData[i].score : 70;
+                const y = Math.round(140 - ((s / 100) * 120));
+                return { x, y, score: s, day: weekData[i]?.day || defaultDays[i] };
+              });
+              const pointsStr = pts.map((p) => `${p.x},${p.y}`).join(' ');
+              const lastPt = pts[pts.length - 1] || { x: 295, y: 46, score: dashboardData.averageScore };
 
-                {/* Y-Axis Labels */}
-                <text x="32" y="24" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">100%</text>
-                <text x="32" y="54" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">75%</text>
-                <text x="32" y="84" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">50%</text>
-                <text x="32" y="114" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">25%</text>
-                <text x="32" y="144" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">0%</text>
+              return (
+                <div className="mt-4 relative h-48 w-full flex items-center justify-center">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 320 160">
+                    {/* Horizontal Guide Lines */}
+                    <line x1="40" y1="20" x2="310" y2="20" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="40" y1="50" x2="310" y2="50" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="40" y1="80" x2="310" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="40" y1="110" x2="310" y2="110" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                    <line x1="40" y1="140" x2="310" y2="140" stroke="#e2e8f0" strokeWidth="1" />
 
-                {/* X-Axis Labels */}
-                <text x="60" y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">Mon</text>
-                <text x="120" y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">Tue</text>
-                <text x="180" y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">Wed</text>
-                <text x="240" y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">Thu</text>
-                <text x="295" y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">Fri</text>
+                    {/* Y-Axis Labels */}
+                    <text x="32" y="24" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">100%</text>
+                    <text x="32" y="54" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">75%</text>
+                    <text x="32" y="84" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">50%</text>
+                    <text x="32" y="114" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">25%</text>
+                    <text x="32" y="144" textAnchor="end" fontSize="10" fill="#94a3b8" fontWeight="500">0%</text>
 
-                {/* Smooth Performance Trend Line */}
-                <polyline
-                  fill="none"
-                  stroke="#3b82f6"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points="60,92 120,74 180,55 240,65 295,46"
-                />
+                    {/* X-Axis Labels */}
+                    {pts.map((p) => (
+                      <text key={p.day} x={p.x} y="156" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="500">
+                        {p.day}
+                      </text>
+                    ))}
 
-                {/* Points on Line */}
-                <circle cx="60" cy="92" r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
-                <circle cx="120" cy="74" r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
-                <circle cx="180" cy="55" r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
-                <circle cx="240" cy="65" r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
+                    {/* Smooth Performance Trend Line */}
+                    <polyline
+                      fill="none"
+                      stroke="#3b82f6"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={pointsStr}
+                    />
 
-                {/* Friday Highlight Point with Tooltip Pill (78%) */}
-                <circle cx="295" cy="46" r="4.5" fill="#2563eb" stroke="#ffffff" strokeWidth="2.5" />
+                    {/* Points on Line */}
+                    {pts.slice(0, pts.length - 1).map((p, i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" />
+                    ))}
 
-                {/* Tooltip Pill */}
-                <g transform="translate(275, 12)">
-                  <rect x="0" y="0" width="40" height="20" rx="6" fill="#2563eb" />
-                  <text x="20" y="14" textAnchor="middle" fontSize="11" fill="#ffffff" fontWeight="bold">
-                    78%
-                  </text>
-                  <polygon points="17,20 23,20 20,24" fill="#2563eb" />
-                </g>
-              </svg>
-            </div>
+                    {/* Highlight Point with Tooltip Pill */}
+                    <circle cx={lastPt.x} cy={lastPt.y} r="4.5" fill="#2563eb" stroke="#ffffff" strokeWidth="2.5" />
+
+                    {/* Tooltip Pill */}
+                    <g transform={`translate(${Math.max(235, lastPt.x - 20)}, ${Math.max(8, lastPt.y - 34)})`}>
+                      <rect x="0" y="0" width="40" height="20" rx="6" fill="#2563eb" />
+                      <text x="20" y="14" textAnchor="middle" fontSize="11" fill="#ffffff" fontWeight="bold">
+                        {lastPt.score}%
+                      </text>
+                      <polygon points="17,20 23,20 20,24" fill="#2563eb" />
+                    </g>
+                  </svg>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -475,47 +567,57 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            {/* Activity List matching screenshot */}
+            {/* Activity List dynamically loaded from backend */}
             <div className="space-y-4">
-              {/* Item 1: Interview Completed - Java Developer */}
-              <div className="flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">
-                      Interview Completed – Java Developer
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Score: <span className="font-semibold text-slate-700">80%</span>
-                    </div>
-                  </div>
+              {dashboardData.recentActivities && dashboardData.recentActivities.length > 0 ? (
+                dashboardData.recentActivities.slice(0, 3).map((act) => {
+                  const isInterview = act.type === 'INTERVIEW' || act.score != null;
+                  return (
+                    <Link
+                      key={act.id}
+                      to={isInterview && act.id && act.id.startsWith('int-') ? `/evaluation?id=${act.id}` : isInterview ? '/attempts' : '/resources'}
+                      className="flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                            isInterview
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-purple-50 text-purple-600'
+                          }`}
+                        >
+                          {isInterview ? (
+                            <CheckCircle2 className="w-5 h-5" />
+                          ) : (
+                            <FileText className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {act.title}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            {act.score != null ? (
+                              <>
+                                Score: <span className="font-semibold text-slate-700">{act.score}%</span>
+                              </>
+                            ) : (
+                              act.subtitle
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-400 shrink-0 font-medium">
+                        {act.timeAgo}
+                      </div>
+                    </Link>
+                  );
+                })
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No recent activities recorded yet. Complete your first mock interview above!
                 </div>
-                <div className="text-[11px] text-slate-400 shrink-0 font-medium">
-                  2 hours ago
-                </div>
-              </div>
-
-              {/* Item 2: New Study Material Added */}
-              <div className="flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">
-                      New Study Material Added
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
-                      Data Structures
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[11px] text-slate-400 shrink-0 font-medium">
-                  1 day ago
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

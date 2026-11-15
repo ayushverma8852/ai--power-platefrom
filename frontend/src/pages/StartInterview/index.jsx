@@ -14,7 +14,8 @@ import {
   Server,
   BrainCircuit,
   Cloud,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
@@ -55,6 +56,7 @@ export default function StartInterview() {
   const [selectedCount, setSelectedCount] = useState(
     config.questionCount || 5
   );
+  const [isLaunching, setIsLaunching] = useState(false);
 
   // When role changes, pre-select that role's recommended skills
   const handleRoleChange = (role) => {
@@ -72,16 +74,24 @@ export default function StartInterview() {
     }
   };
 
-  const handleLaunch = () => {
-    startInterview({
-      roleId: selectedRole.id,
-      roleTitle: selectedRole.title,
-      skills: selectedSkills,
-      experienceLevel: selectedExperience,
-      difficulty: selectedDifficulty,
-      questionCount: selectedCount
-    });
-    navigate('/interview-session');
+  const handleLaunch = async () => {
+    setIsLaunching(true);
+    try {
+      await startInterview({
+        roleId: selectedRole.id,
+        roleTitle: selectedRole.title,
+        skills: selectedSkills,
+        experienceLevel: selectedExperience,
+        difficulty: selectedDifficulty,
+        questionCount: selectedCount
+      });
+      navigate('/interview-session');
+    } catch (err) {
+      console.warn('Failed to start interview:', err);
+      navigate('/interview-session');
+    } finally {
+      setIsLaunching(false);
+    }
   };
 
   const selectedCountObj = questionCountOptions.find(
@@ -400,11 +410,12 @@ export default function StartInterview() {
                   <Button
                     variant="primary"
                     size="lg"
-                    icon={Sparkles}
+                    icon={isLaunching ? Loader2 : Sparkles}
                     onClick={handleLaunch}
+                    disabled={isLaunching}
                     className="w-full text-sm font-bold shadow-md shadow-indigo-300"
                   >
-                    Launch Interview Session
+                    {isLaunching ? 'Formulating Questions with AI...' : 'Launch Interview Session'}
                   </Button>
 
                   <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/60 text-[11px] text-amber-800 leading-relaxed">

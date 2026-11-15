@@ -13,7 +13,8 @@ import {
   Sparkles,
   RotateCcw,
   Flag,
-  FileCheck2
+  FileCheck2,
+  Loader2
 } from 'lucide-react';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
@@ -45,6 +46,7 @@ export default function InterviewSession() {
   const [isRecording, setIsRecording] = useState(false);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -80,10 +82,18 @@ export default function InterviewSession() {
     }
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     setShowFinishModal(false);
-    completeInterview();
-    navigate('/evaluation');
+    setIsEvaluating(true);
+    try {
+      await completeInterview();
+      navigate('/evaluation');
+    } catch (err) {
+      console.warn('Evaluation failed:', err);
+      navigate('/evaluation');
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -366,6 +376,23 @@ export default function InterviewSession() {
           </div>
         </div>
       </Modal>
+
+      {/* Evaluating AI Scorecard Modal Overlay */}
+      {isEvaluating && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-4 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">
+              AI Evaluation in Progress...
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Evaluating your answers against industry benchmarks, technical depth, and communication structure. Your scorecard will be ready in moments!
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

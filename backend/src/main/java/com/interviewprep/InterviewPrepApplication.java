@@ -1,0 +1,15 @@
+package com.interviewprep;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * Main application entry point for InterviewPrep AI Backend.
+ */
+@SpringBootApplication
+public class InterviewPrepApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(InterviewPrepApplication.class, args);
+    }
+}

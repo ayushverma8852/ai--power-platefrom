@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Trophy,
@@ -9,21 +9,54 @@ import {
   CheckCircle2,
   ArrowRight,
   Sparkles,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Badge from '../../components/common/Badge';
 import ProgressBar from '../../components/common/ProgressBar';
 import Button from '../../components/common/Button';
+import { api } from '../../services/api';
 
 export default function Performance() {
-  const topics = [
-    { name: 'Core Java & OOP Concepts', score: 85, benchmark: 80 },
-    { name: 'Data Structures & Algorithms', score: 78, benchmark: 75 },
-    { name: 'Spring Boot & Microservices', score: 72, benchmark: 70 },
-    { name: 'Database & SQL Indexing', score: 80, benchmark: 75 },
-    { name: 'System Design & Scalability', score: 68, benchmark: 70 },
-  ];
+  const [performanceData, setPerformanceData] = useState({
+    overallReadiness: 78,
+    trendPercentage: 6,
+    placementBenchmark: 75,
+    strongestTopic: 'Java OOP',
+    topicMastery: [
+      { name: 'Core Java & OOP Concepts', score: 85, benchmark: 80 },
+      { name: 'Data Structures & Algorithms', score: 78, benchmark: 75 },
+      { name: 'Spring Boot & Microservices', score: 72, benchmark: 70 },
+      { name: 'Database & SQL Indexing', score: 80, benchmark: 75 },
+      { name: 'System Design & Scalability', score: 68, benchmark: 70 },
+    ]
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    api.getPerformance()
+      .then((data) => {
+        if (isMounted && data) {
+          setPerformanceData((prev) => ({
+            ...prev,
+            overallReadiness: data.overallReadiness ?? prev.overallReadiness,
+            trendPercentage: data.trendPercentage ?? prev.trendPercentage,
+            placementBenchmark: data.placementBenchmark ?? prev.placementBenchmark,
+            strongestTopic: data.strongestTopic || prev.strongestTopic,
+            topicMastery: data.topicMastery && data.topicMastery.length > 0
+              ? data.topicMastery
+              : prev.topicMastery
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('[Performance] Could not fetch live metrics, using defaults:', err.message);
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const topics = performanceData.topicMastery;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -52,10 +85,10 @@ export default function Performance() {
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Overall Readiness
           </span>
-          <div className="text-3xl font-extrabold text-slate-900 mt-2">78%</div>
+          <div className="text-3xl font-extrabold text-slate-900 mt-2">{performanceData.overallReadiness}%</div>
           <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>+6% over the last 14 days</span>
+            <span>+{performanceData.trendPercentage}% over the last 14 days</span>
           </div>
         </div>
 
@@ -63,7 +96,7 @@ export default function Performance() {
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Placement Benchmark
           </span>
-          <div className="text-3xl font-extrabold text-slate-900 mt-2">75%</div>
+          <div className="text-3xl font-extrabold text-slate-900 mt-2">{performanceData.placementBenchmark}%</div>
           <div className="mt-2 text-xs text-slate-500">
             Qualifies for Top Product & Service Firms
           </div>
@@ -73,9 +106,9 @@ export default function Performance() {
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Strongest Topic
           </span>
-          <div className="text-3xl font-extrabold text-slate-900 mt-2">Java OOP</div>
+          <div className="text-3xl font-extrabold text-slate-900 mt-2">{performanceData.strongestTopic}</div>
           <div className="mt-2 text-xs text-slate-500">
-            85% Accuracy across 24 questions
+            Top performing domain across technical mock sessions
           </div>
         </div>
       </div>

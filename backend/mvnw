@@ -1,0 +1,18 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Maven Wrapper Script for InterviewPrep AI Backend
+# ----------------------------------------------------------------------------
+
+if [ -z "$JAVA_HOME" ] ; then
+  if [ -d "/c/Program Files/Java/jdk-21" ] ; then
+    export JAVA_HOME="/c/Program Files/Java/jdk-21"
+  elif [ -d "C:/Program Files/Java/jdk-21" ] ; then
+    export JAVA_HOME="C:/Program Files/Java/jdk-21"
+  fi
+fi
+
+if [ -f "$HOME/.m2/apache-maven-3.9.9/bin/mvn" ] ; then
+  exec "$HOME/.m2/apache-maven-3.9.9/bin/mvn" "$@"
+else
+  exec mvn "$@"
+fi

@@ -1,20 +1,22 @@
 import React, { createContext, useContext, useState } from 'react';
 import { mockQuestionsBank } from '../data/mockQuestions';
 import { mockEvaluationResult } from '../data/mockEvaluation';
+import { api } from '../services/api';
 
 const InterviewContext = createContext(null);
 
 export function InterviewProvider({ children }) {
   const [config, setConfig] = useState({
     roleId: 'frontend-react',
-    roleTitle: 'Frontend React Developer',
-    experienceLevel: 'Entry Level (0-1 yrs)',
+    roleTitle: 'Software Developer',
+    experienceLevel: 'Fresher',
     difficulty: 'medium',
-    skills: ['React.js', 'JavaScript (ES6+)', 'Tailwind CSS', 'RESTful APIs'],
+    skills: ['Java', 'DSA', 'Spring Boot'],
     questionCount: 5
   });
 
   const [activeSession, setActiveSession] = useState({
+    interviewId: null,
     isActive: false,
     questions: mockQuestionsBank,
     currentIndex: 0,
@@ -26,26 +28,52 @@ export function InterviewProvider({ children }) {
 
   const [latestEvaluation, setLatestEvaluation] = useState(mockEvaluationResult);
 
-  const startInterview = (newConfig) => {
+  const startInterview = async (newConfig) => {
     const updatedConfig = { ...config, ...newConfig };
     setConfig(updatedConfig);
 
-    // Pick questions matching or defaulting
-    const count = updatedConfig.questionCount || 5;
-    const selectedQuestions = mockQuestionsBank.slice(0, count);
+    try {
+      // Connect to Spring Boot backend API
+      const created = await api.createInterview({
+        roleTitle: updatedConfig.roleTitle,
+        skills: updatedConfig.skills,
+        experienceLevel: updatedConfig.experienceLevel,
+        difficulty: updatedConfig.difficulty,
+        questionCount: updatedConfig.questionCount || 5
+      });
 
-    setActiveSession({
-      isActive: true,
-      questions: selectedQuestions,
-      currentIndex: 0,
-      answers: {},
-      startedAt: new Date(),
-      timeElapsed: 0,
-      isSubmitted: false
-    });
+      setActiveSession({
+        interviewId: created.id,
+        isActive: true,
+        questions: created.questions && created.questions.length > 0 ? created.questions : mockQuestionsBank.slice(0, updatedConfig.questionCount || 5),
+        currentIndex: 0,
+        answers: {},
+        startedAt: new Date(),
+        timeElapsed: 0,
+        isSubmitted: false
+      });
+      return created;
+    } catch (err) {
+      console.warn('[InterviewContext] Backend interview creation failed, using client-side fallback:', err.message);
+      
+      const count = updatedConfig.questionCount || 5;
+      const selectedQuestions = mockQuestionsBank.slice(0, count);
+
+      setActiveSession({
+        interviewId: 'local-session-' + Date.now(),
+        isActive: true,
+        questions: selectedQuestions,
+        currentIndex: 0,
+        answers: {},
+        startedAt: new Date(),
+        timeElapsed: 0,
+        isSubmitted: false
+      });
+    }
   };
 
   const saveAnswer = (questionId, answerText) => {
+    // 1. Optimistic UI update
     setActiveSession(prev => ({
       ...prev,
       answers: {
@@ -53,6 +81,13 @@ export function InterviewProvider({ children }) {
         [questionId]: answerText
       }
     }));
+
+    // 2. Sync to Spring Boot Backend asynchronously
+    if (activeSession.interviewId && !activeSession.interviewId.startsWith('local-')) {
+      api.submitAnswer(activeSession.interviewId, questionId, answerText).catch(err => {
+        console.warn('[InterviewContext] Failed to sync answer to backend:', err.message);
+      });
+    }
   };
 
   const nextQuestion = () => {
@@ -76,8 +111,25 @@ export function InterviewProvider({ children }) {
     }));
   };
 
-  const completeInterview = () => {
-    // Generate evaluation referencing active answers
+  const completeInterview = async () => {
+    const interviewId = activeSession.interviewId;
+
+    if (interviewId && !interviewId.startsWith('local-')) {
+      try {
+        const evaluationReport = await api.completeInterview(interviewId, activeSession.timeElapsed || 1200);
+        setLatestEvaluation(evaluationReport);
+        setActiveSession(prev => ({
+          ...prev,
+          isActive: false,
+          isSubmitted: true
+        }));
+        return evaluationReport;
+      } catch (err) {
+        console.warn('[InterviewContext] Backend complete evaluation failed, using client fallback:', err.message);
+      }
+    }
+
+    // Fallback evaluation generation
     const generatedEvaluation = {
       ...mockEvaluationResult,
       id: `eval-${Date.now()}`,
@@ -86,7 +138,6 @@ export function InterviewProvider({ children }) {
       date: new Date().toISOString().split('T')[0],
       completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       durationMinutes: Math.max(1, Math.round(activeSession.timeElapsed / 60) || 12),
-      // Map answers to reviews
       questionReviews: activeSession.questions.map((q, idx) => {
         const candidateAns = activeSession.answers[q.id] || "No written response submitted during practice session.";
         const wordCount = candidateAns.trim().split(/\s+/).filter(Boolean).length;
@@ -98,7 +149,7 @@ export function InterviewProvider({ children }) {
           candidateAnswer: candidateAns,
           score: score,
           feedback: `Your response touched on key fundamentals. Make sure to clearly state real-world trade-offs and edge-case handling.`,
-          keyPointsCovered: q.evaluationCriteria.slice(0, 3)
+          keyPointsCovered: q.evaluationCriteria ? q.evaluationCriteria.slice(0, 3) : ["Core concept covered"]
         };
       })
     };
@@ -114,6 +165,7 @@ export function InterviewProvider({ children }) {
 
   const resetSession = () => {
     setActiveSession({
+      interviewId: null,
       isActive: false,
       questions: mockQuestionsBank,
       currentIndex: 0,
@@ -124,6 +176,20 @@ export function InterviewProvider({ children }) {
     });
   };
 
+  const loadEvaluationById = async (interviewId) => {
+    if (!interviewId) return null;
+    try {
+      const report = await api.getResults(interviewId);
+      if (report) {
+        setLatestEvaluation(report);
+        return report;
+      }
+    } catch (err) {
+      console.warn('[InterviewContext] Could not load evaluation for interviewId:', interviewId, err.message);
+    }
+    return null;
+  };
+
   return (
     <InterviewContext.Provider
       value={{
@@ -132,12 +198,14 @@ export function InterviewProvider({ children }) {
         activeSession,
         setActiveSession,
         latestEvaluation,
+        setLatestEvaluation,
         startInterview,
         saveAnswer,
         nextQuestion,
         prevQuestion,
         jumpToQuestion,
         completeInterview,
+        loadEvaluationById,
         resetSession
       }}
     >
