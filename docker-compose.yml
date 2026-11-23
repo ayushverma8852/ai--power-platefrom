@@ -1,0 +1,108 @@
+services:
+  # 1. MySQL 8 Database
+  mysql:
+    image: mysql:8.0
+    container_name: interviewprep-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
+      MYSQL_DATABASE: ${DB_NAME:-interviewprep_ai}
+      MYSQL_USER: ${DB_USER:?DB_USER must be set}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    ports:
+      - "${DB_PORT_FORWARD:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - interviewprep-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 2. Python FastAPI AI Microservice
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: interviewprep-ai-service
+    restart: always
+    environment:
+      - APP_NAME=InterviewPrep AI Microservice
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - PORT=8000
+      - HOST=0.0.0.0
+      - AI_PROVIDER=${AI_PROVIDER:?AI_PROVIDER must be explicitly configured}
+      - DEMO_MODE=${DEMO_MODE:-false}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - CORS_ORIGINS=${AI_CORS_ORIGINS:-http://localhost:8080,http://backend:8080}
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - interviewprep-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Java 21 Spring Boot Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: interviewprep-backend
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-prod}
+      - PORT=8080
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-interviewprep_ai}
+      - DB_USER=${DB_USER:?DB_USER must be set}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS:-86400000}
+      - AI_SERVICE_URL=http://ai-service:8000
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:80,http://localhost}
+    ports:
+      - "8080:8080"
+    networks:
+      - interviewprep-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. React Vite Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: interviewprep-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "5173:80"
+    networks:
+      - interviewprep-network
+
+networks:
+  interviewprep-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
